@@ -1,0 +1,12 @@
+---
+Checks: '
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  bugprone-*,
+  modernize-*,
+  performance-*,
+  readability-*'
+WarningsAsErrors: ''
+HeaderFilterRegex: 'flatset/.*'
+FormatStyle: file
+...
