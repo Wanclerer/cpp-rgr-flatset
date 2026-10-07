@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <iterator>
 #include <new>
 #include <utility>
 
@@ -17,19 +18,103 @@ public:
     using key_compare = Compare;
     using value_compare = Compare;
 
+    // --- Вложенный класс итератора произвольного доступа ---
+    class ConstIterator {
+    public:
+        using iterator_category = std::random_access_iterator_tag;
+        using value_type = Key;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const Key*;
+        using reference = const Key&;
+
+        constexpr ConstIterator() noexcept : ptr_(nullptr) {}
+        constexpr explicit ConstIterator(const Key* ptr) noexcept : ptr_(ptr) {}
+
+        [[nodiscard]] reference operator*() const noexcept { return *ptr_; }
+        [[nodiscard]] pointer operator->() const noexcept { return ptr_; }
+
+        ConstIterator& operator++() noexcept {
+            ++ptr_;
+            return *this;
+        }
+
+        ConstIterator operator++(int) noexcept {
+            ConstIterator temp = *this;
+            ++ptr_;
+            return temp;
+        }
+
+        ConstIterator& operator--() noexcept {
+            --ptr_;
+            return *this;
+        }
+
+        ConstIterator operator--(int) noexcept {
+            ConstIterator temp = *this;
+            --ptr_;
+            return temp;
+        }
+
+        ConstIterator& operator+=(difference_type n) noexcept {
+            ptr_ += n;
+            return *this;
+        }
+
+        [[nodiscard]] ConstIterator operator+(difference_type n) const noexcept {
+            return ConstIterator(ptr_ + n);
+        }
+
+        [[nodiscard]] friend ConstIterator operator+(difference_type n, const ConstIterator& it) noexcept {
+            return ConstIterator(it.ptr_ + n);
+        }
+
+        ConstIterator& operator-=(difference_type n) noexcept {
+            ptr_ -= n;
+            return *this;
+        }
+
+        [[nodiscard]] ConstIterator operator-(difference_type n) const noexcept {
+            return ConstIterator(ptr_ - n);
+        }
+
+        [[nodiscard]] difference_type operator-(const ConstIterator& other) const noexcept {
+            return ptr_ - other.ptr_;
+        }
+
+        [[nodiscard]] reference operator[](difference_type n) const noexcept {
+            return *(ptr_ + n);
+        }
+
+        [[nodiscard]] bool operator==(const ConstIterator& other) const noexcept { return ptr_ == other.ptr_; }
+        [[nodiscard]] bool operator!=(const ConstIterator& other) const noexcept { return ptr_ != other.ptr_; }
+        [[nodiscard]] bool operator<(const ConstIterator& other) const noexcept { return ptr_ < other.ptr_; }
+        [[nodiscard]] bool operator<=(const ConstIterator& other) const noexcept { return ptr_ <= other.ptr_; }
+        [[nodiscard]] bool operator>(const ConstIterator& other) const noexcept { return ptr_ > other.ptr_; }
+        [[nodiscard]] bool operator>=(const ConstIterator& other) const noexcept { return ptr_ >= other.ptr_; }
+
+    private:
+        const Key* ptr_{nullptr};
+        friend class FlatSet;
+    };
+
+    // В FlatSet оба типа итератора константные для защиты инварианта сортировки
+    using iterator = ConstIterator;
+    using const_iterator = ConstIterator;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
     // --- Конструкторы ---
     FlatSet() : FlatSet(Compare()) {}
 
     explicit FlatSet(const Compare& comp)
         : data_(nullptr), size_(0), capacity_(0), comp_(comp) {}
 
-    // --- 1. Деструктор ---
+    // --- Деструктор и Rule of Five ---
     ~FlatSet() {
         clear();
         deallocate(data_);
     }
 
-    // --- 2. Конструктор копирования (Deep Copy) ---
     FlatSet(const FlatSet& other)
         : data_(nullptr), size_(0), capacity_(0), comp_(other.comp_) {
         if (other.size_ > 0) {
@@ -50,14 +135,12 @@ public:
         }
     }
 
-    // --- 3. Перемещающий конструктор ---
     FlatSet(FlatSet&& other) noexcept
         : data_(std::exchange(other.data_, nullptr)),
           size_(std::exchange(other.size_, 0)),
           capacity_(std::exchange(other.capacity_, 0)),
           comp_(std::move(other.comp_)) {}
 
-    // --- 4. Копирующее присваивание (Copy-and-Swap) ---
     FlatSet& operator=(const FlatSet& other) {
         if (this != &other) {
             FlatSet temp(other);
@@ -66,7 +149,6 @@ public:
         return *this;
     }
 
-    // --- 5. Перемещающее присваивание ---
     FlatSet& operator=(FlatSet&& other) noexcept {
         if (this != &other) {
             clear();
@@ -79,7 +161,24 @@ public:
         return *this;
     }
 
-    // --- Управление емкостью и памятью ---
+    // --- Навигация и итераторы ---
+    [[nodiscard]] iterator begin() noexcept { return iterator(data_); }
+    [[nodiscard]] const_iterator begin() const noexcept { return const_iterator(data_); }
+    [[nodiscard]] const_iterator cbegin() const noexcept { return const_iterator(data_); }
+
+    [[nodiscard]] iterator end() noexcept { return iterator(data_ + size_); }
+    [[nodiscard]] const_iterator end() const noexcept { return const_iterator(data_ + size_); }
+    [[nodiscard]] const_iterator cend() const noexcept { return const_iterator(data_ + size_); }
+
+    [[nodiscard]] reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
+    [[nodiscard]] const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(end()); }
+    [[nodiscard]] const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(cend()); }
+
+    [[nodiscard]] reverse_iterator rend() noexcept { return reverse_iterator(begin()); }
+    [[nodiscard]] const_reverse_iterator rend() const noexcept { return const_reverse_iterator(begin()); }
+    [[nodiscard]] const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
+
+    // --- Управление памятью ---
     void reserve(size_type new_cap) {
         if (new_cap <= capacity_) {
             return;
@@ -125,14 +224,13 @@ public:
         swap(comp_, other.comp_);
     }
 
-    // --- Базовые методы ---
+    // --- Базовые геттеры ---
     [[nodiscard]] bool empty() const noexcept { return size_ == 0; }
     [[nodiscard]] size_type size() const noexcept { return size_; }
     [[nodiscard]] size_type capacity() const noexcept { return capacity_; }
     [[nodiscard]] key_compare key_comp() const { return comp_; }
 
 protected:
-    // Вспомогательный метод для тестирования памяти до реализации insert
     void push_back_unchecked(const Key& val) {
         if (size_ == capacity_) {
             reserve(capacity_ == 0 ? 1 : capacity_ * 2);
