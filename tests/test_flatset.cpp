@@ -1,7 +1,7 @@
-#include <flatset/FlatSet.hpp>
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <flatset/FlatSet.hpp>
 #include <numeric>
 #include <random>
 #include <stdexcept>
@@ -44,15 +44,13 @@ struct Tracker {
 };
 
 class FlatSetResourceTest : public ::testing::Test {
-protected:
+   protected:
     void SetUp() override {
         Tracker::live_objects = 0;
         Tracker::copy_count = 0;
         Tracker::move_count = 0;
     }
-    void TearDown() override {
-        EXPECT_EQ(Tracker::live_objects, 0);
-    }
+    void TearDown() override { EXPECT_EQ(Tracker::live_objects, 0); }
 };
 
 TEST_F(FlatSetResourceTest, DefaultConstructorAndShrinkToFit) {
@@ -93,14 +91,14 @@ TEST_F(FlatSetResourceTest, MoveConstructorAndMoveAssignment) {
 
     custom::FlatSet<Tracker> dst(std::move(src));
     EXPECT_EQ(dst.size(), 2);
-    EXPECT_EQ(src.size(), 0);
-    EXPECT_EQ(src.capacity(), 0);
+    EXPECT_EQ(src.size(), 0);      // NOLINT
+    EXPECT_EQ(src.capacity(), 0);  // NOLINT
     EXPECT_EQ(Tracker::copy_count, copies_before);
 
     custom::FlatSet<Tracker> dst2;
     dst2 = std::move(dst);
     EXPECT_EQ(dst2.size(), 2);
-    EXPECT_EQ(dst.size(), 0);
+    EXPECT_EQ(dst.size(), 0);  // NOLINT
     EXPECT_EQ(Tracker::copy_count, copies_before);
 }
 
@@ -123,18 +121,9 @@ struct ThrowOnCopy {
         }
         ++live_objects;
     }
-    // Перемещение без noexcept (делегирует копированию), чтобы std::move_if_noexcept
-    // выбрал безопасное копирование и позволил проверить строгую гарантию безопасности исключений
-    ThrowOnCopy(ThrowOnCopy&& other) noexcept(false) : ThrowOnCopy(other) {}
-
-    ThrowOnCopy& operator=(const ThrowOnCopy& other) {
-        id = other.id;
-        return *this;
-    }
-    ThrowOnCopy& operator=(ThrowOnCopy&& other) noexcept(false) {
-        id = other.id;
-        return *this;
-    }
+    ThrowOnCopy(ThrowOnCopy&& other) noexcept(false) : ThrowOnCopy(other) {}  // NOLINT
+    ThrowOnCopy& operator=(const ThrowOnCopy& other) = default;
+    ThrowOnCopy& operator=(ThrowOnCopy&& other) noexcept(false) = default;
     ~ThrowOnCopy() { --live_objects; }
 
     bool operator<(const ThrowOnCopy& other) const { return id < other.id; }
@@ -149,13 +138,11 @@ TEST(FlatSetExceptionTest, StrongExceptionGuaranteeOnRealloc) {
     s.insert(ThrowOnCopy(1));
     s.insert(ThrowOnCopy(2));
 
-    // Провоцируем исключение при попытке реаллокации
     ThrowOnCopy::copy_attempts = 0;
     ThrowOnCopy::throw_after = 2;
 
     EXPECT_THROW(s.reserve(100), std::runtime_error);
 
-    // Контейнер остался в валидном состоянии, живые объекты не утекли
     EXPECT_EQ(s.size(), 2);
     s.clear();
     EXPECT_EQ(ThrowOnCopy::live_objects, 0);
@@ -208,8 +195,7 @@ TEST(FlatSetOperationsTest, DuplicateHandling) {
 }
 
 TEST(FlatSetOperationsTest, CustomComparatorGreater) {
-    // Множество с сортировкой по убыванию (std::greater)
-    custom::FlatSet<int, std::greater<int>> s{10, 50, 20, 40, 30};
+    custom::FlatSet<int, std::greater<>> s{10, 50, 20, 40, 30};
 
     std::vector<int> expected{50, 40, 30, 20, 10};
     std::vector<int> actual(s.begin(), s.end());
@@ -223,54 +209,46 @@ TEST(FlatSetOperationsTest, CustomComparatorGreater) {
 TEST(FlatSetOperationsTest, EraseEdgeCases) {
     custom::FlatSet<int> s{10, 20, 30, 40, 50};
 
-    // Удаление первого элемента
     s.erase(s.begin());
     EXPECT_FALSE(s.contains(10));
     EXPECT_EQ(s.size(), 4);
 
-    // Удаление последнего элемента
     s.erase(--s.end());
     EXPECT_FALSE(s.contains(50));
     EXPECT_EQ(s.size(), 3);
 
-    // Попытка удалить несуществующий ключ
     EXPECT_EQ(s.erase(999), 0);
     EXPECT_EQ(s.size(), 3);
 
-    // Удаление диапазона
     auto it_first = s.find(20);
     auto it_last = s.find(40);
-    s.erase(it_first, it_last);  // удаляет [20, 40), остается 40
+    s.erase(it_first, it_last);
     EXPECT_EQ(s.size(), 1);
     EXPECT_TRUE(s.contains(40));
 
-    // Очистка через erase
     s.erase(s.begin(), s.end());
     EXPECT_TRUE(s.empty());
 }
 
 TEST(FlatSetOperationsTest, MergeAdvancedCases) {
-    // 1. Полностью пересекающиеся
     {
         custom::FlatSet<int> a{1, 2, 3};
         custom::FlatSet<int> b{1, 2, 3};
         a.merge(b);
         EXPECT_EQ(a.size(), 3);
-        EXPECT_EQ(b.size(), 3);  // Все остались в b, так как они дубликаты
+        EXPECT_EQ(b.size(), 3);
     }
 
-    // 2. Непересекающиеся
     {
         custom::FlatSet<int> a{1, 3, 5};
         custom::FlatSet<int> b{2, 4, 6};
         a.merge(b);
         EXPECT_EQ(a.size(), 6);
-        EXPECT_TRUE(b.empty());  // Все ушли в a
+        EXPECT_TRUE(b.empty());
         std::vector<int> exp{1, 2, 3, 4, 5, 6};
         EXPECT_TRUE(std::equal(a.begin(), a.end(), exp.begin()));
     }
 
-    // 3. Самослияние (self-merge)
     {
         custom::FlatSet<int> a{1, 2, 3};
         a.merge(a);
@@ -287,7 +265,6 @@ TEST(FlatSetOperationsTest, StressTestRandomData) {
         s.insert(dist(rng));
     }
 
-    // Проверяем, что элементы строго возрастают
     ASSERT_FALSE(s.empty());
     for (auto it = s.begin(); it + 1 != s.end(); ++it) {
         EXPECT_LT(*it, *(it + 1));

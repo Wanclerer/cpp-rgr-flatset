@@ -1,12 +1,13 @@
----
 Checks: '
   clang-diagnostic-*,
   clang-analyzer-*,
   bugprone-*,
   modernize-*,
   performance-*,
-  readability-*'
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -readability-magic-numbers'
 WarningsAsErrors: ''
 HeaderFilterRegex: 'flatset/.*'
 FormatStyle: file
-...
