@@ -371,6 +371,41 @@ public:
     }
 
     // --- Управление емкостью ---
+    void shrink_to_fit() {
+        if (size_ == capacity_) {
+            return;
+        }
+        if (size_ == 0) {
+            deallocate(data_);
+            data_ = nullptr;
+            capacity_ = 0;
+            return;
+        }
+
+        Key* new_data = allocate(size_);
+        size_type constructed = 0;
+        try {
+            for (size_type i = 0; i < size_; ++i) {
+                new (static_cast<void*>(new_data + i)) Key(std::move_if_noexcept(data_[i]));
+                ++constructed;
+            }
+        } catch (...) {
+            for (size_type i = 0; i < constructed; ++i) {
+                new_data[i].~Key();
+            }
+            deallocate(new_data);
+            throw;
+        }
+
+        for (size_type i = 0; i < size_; ++i) {
+            data_[i].~Key();
+        }
+        deallocate(data_);
+
+        data_ = new_data;
+        capacity_ = size_;
+    }
+    
     void reserve(size_type new_cap) {
         if (new_cap <= capacity_) {
             return;
